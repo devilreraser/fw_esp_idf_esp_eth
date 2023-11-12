@@ -14,6 +14,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/cdefs.h>
+#include "sdkconfig.h"
+#include "esp_idf_version.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_attr.h"
@@ -36,6 +38,18 @@
 #include "esp_cpu.h"
 
 static const char *TAG = "dm9051.mac";
+
+#if CONFIG_ESP_ETH_ESP_IDF_VERSION_LESS_THAN_5
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    0
+#elif CONFIG_ESP_ETH_ESP_IDF_VERSION_GREATHER_EQUAL_5
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    1
+#elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    1
+#else
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    0
+#endif
+
+
 
 #define DM9051_SPI_LOCK_TIMEOUT_MS (50)
 #define DM9051_PHY_OPERATION_TIMEOUT_US (1000)
@@ -756,7 +770,8 @@ esp_eth_mac_t *esp_eth_mac_new_dm9051(const eth_dm9051_config_t *dm9051_config, 
     ESP_GOTO_ON_FALSE(emac, NULL, err, TAG, "calloc emac failed");
     /* dm9051 receive is driven by interrupt only for now*/
     ESP_GOTO_ON_FALSE(dm9051_config->int_gpio_num >= 0, NULL, err, TAG, "error interrupt gpio number");
-	#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)    /* SPI device init */
+	#if ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5  
+    /* SPI device init */
     spi_device_interface_config_t spi_devcfg;
     memcpy(&spi_devcfg, dm9051_config->spi_devcfg, sizeof(spi_device_interface_config_t));
     if (dm9051_config->spi_devcfg->command_bits == 0 && dm9051_config->spi_devcfg->address_bits == 0) {

@@ -17,6 +17,7 @@
 #include "esp_idf_version.h"
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 #include "esp_private/periph_ctrl.h"
+#include "esp_eth_driver.h"
 #else
 #include "driver/periph_ctrl.h"
 #endif
@@ -24,7 +25,6 @@
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_check.h"
-#include "esp_eth_driver.h"
 #include "esp_eth.h"
 #include "esp_pm.h"
 #include "esp_mac.h"

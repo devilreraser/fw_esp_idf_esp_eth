@@ -19,6 +19,18 @@
 #include "esp_eth_driver.h"
 #include "esp_eth.h"
 #include "ksz8851.h"
+#include "sdkconfig.h"
+#include "esp_idf_version.h"
+
+#if CONFIG_ESP_ETH_ESP_IDF_VERSION_LESS_THAN_5
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    0
+#elif CONFIG_ESP_ETH_ESP_IDF_VERSION_GREATHER_EQUAL_5
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    1
+#elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    1
+#else
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    0
+#endif
 
 
 typedef struct {
@@ -670,7 +682,7 @@ esp_eth_mac_t *esp_eth_mac_new_ksz8851snl(const eth_ksz8851snl_config_t *ksz8851
     ESP_GOTO_ON_FALSE(emac, NULL, err, TAG, "no mem for MAC instance");
 
 
-	#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+	#if ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5
     /* SPI device init */
     ESP_GOTO_ON_FALSE(spi_bus_add_device(ksz8851snl_config->spi_host_id, ksz8851snl_config->spi_devcfg, &emac->spi_hdl) == ESP_OK,
                                             NULL, err, TAG, "adding device to SPI host #%d failed", ksz8851snl_config->spi_host_id + 1);

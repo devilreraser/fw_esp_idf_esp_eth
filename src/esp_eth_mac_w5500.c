@@ -20,7 +20,9 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_eth.h"
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 #include "esp_eth_driver.h"
+#endif
 #include "esp_system.h"
 #include "esp_intr_alloc.h"
 #include "esp_heap_caps.h"
@@ -33,8 +35,20 @@
 #include "hal/cpu_hal.h"
 #include "w5500.h"
 #include "sdkconfig.h"
+#include "esp_idf_version.h"
 
 static const char *TAG = "w5500.mac";
+
+#if CONFIG_ESP_ETH_ESP_IDF_VERSION_LESS_THAN_5
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    0
+#elif CONFIG_ESP_ETH_ESP_IDF_VERSION_GREATHER_EQUAL_5
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    1
+#elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    1
+#else
+#define ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5    0
+#endif
+
 
 #define W5500_SPI_LOCK_TIMEOUT_MS (50)
 #define W5500_TX_MEM_SIZE (0x4000)
@@ -833,7 +847,7 @@ esp_eth_mac_t *esp_eth_mac_new_w5500(const eth_w5500_config_t *w5500_config, con
     ESP_GOTO_ON_FALSE(emac, NULL, err, TAG, "no mem for MAC instance");
     /* w5500 driver is interrupt driven */
     ESP_GOTO_ON_FALSE(w5500_config->int_gpio_num >= 0, NULL, err, TAG, "invalid interrupt gpio number");
-	#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+	#if ESP_ETH_VERSION_BIGGER_OR_EQUAL_TO_5
     /* SPI device init */
     spi_device_interface_config_t spi_devcfg;
     memcpy(&spi_devcfg, w5500_config->spi_devcfg, sizeof(spi_device_interface_config_t));
