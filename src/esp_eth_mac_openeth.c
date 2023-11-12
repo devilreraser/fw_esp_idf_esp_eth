@@ -403,7 +403,11 @@ esp_eth_mac_t *esp_eth_mac_new_openeth(const eth_mac_config_t *config)
     // Create the RX task
     BaseType_t core_num = tskNO_AFFINITY;
     if (config->flags & ETH_MAC_FLAG_PIN_TO_CORE) {
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        core_num = esp_cpu_get_core_id();
+        #else
         core_num = cpu_hal_get_core_id();
+        #endif
     }
     BaseType_t xReturned = xTaskCreatePinnedToCore(emac_opencores_rx_task, "emac_rx", config->rx_task_stack_size, emac,
                            config->rx_task_prio, &emac->rx_task_hdl, core_num);

@@ -21,6 +21,9 @@
 extern "C" {
 #endif
 
+#define ETH_CRC_LEN         (4)  /* Ethernet frame CRC length */
+
+
 /**
  * @brief Maximum Ethernet payload size
  *

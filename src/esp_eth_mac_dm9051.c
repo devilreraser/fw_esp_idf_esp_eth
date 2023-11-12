@@ -780,7 +780,11 @@ esp_eth_mac_t *esp_eth_mac_new_dm9051(const eth_dm9051_config_t *dm9051_config, 
     /* create dm9051 task */
     BaseType_t core_num = tskNO_AFFINITY;
     if (mac_config->flags & ETH_MAC_FLAG_PIN_TO_CORE) {
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        core_num = esp_cpu_get_core_id();
+        #else
         core_num = cpu_hal_get_core_id();
+        #endif
     }
     BaseType_t xReturned = xTaskCreatePinnedToCore(emac_dm9051_task, "dm9051_tsk", mac_config->rx_task_stack_size, emac,
                            mac_config->rx_task_prio, &emac->rx_task_hdl, core_num);

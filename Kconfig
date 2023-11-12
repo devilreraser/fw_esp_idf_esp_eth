@@ -1,5 +1,9 @@
 menu "Ethernet"
 
+    config ESP_ETH_ESP_IDF_VERSION_LESS_THAN_5
+        bool "Custom esp_eth driver version is based on ESP_IDF_VERSION < 5.0.0"
+        default y
+
     # Invisible item that is enabled if any Ethernet selection is made
     config ETH_ENABLED
         bool

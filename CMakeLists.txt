@@ -1,13 +1,16 @@
 idf_build_get_property(components_to_build BUILD_COMPONENTS)
 
+
+
+
 set(srcs)
-set(include)
+# set(include)
 set(priv_requires)
 
 # If Ethernet disabled in Kconfig, this is a config-only component
 if(CONFIG_ETH_ENABLED)
     set(srcs "src/esp_eth.c" "src/esp_eth_phy.c")
-    set(include "include")
+#    set(include "include"  $ENV{IDF_PATH}/components/driver/include)
     set(priv_requires "driver" "log" "esp_timer") # require "driver" for using some GPIO APIs
 
     if(NOT CMAKE_BUILD_EARLY_EXPANSION)
@@ -47,9 +50,14 @@ if(CONFIG_ETH_ENABLED)
     endif()
 endif()
 
+# set(EXTRA_COMPONENT_DIRS $ENV{IDF_PATH}/components/driver/include)
+
 idf_component_register(SRCS "${srcs}"
-                       INCLUDE_DIRS ${include}
-                       REQUIRES "esp_event" # For using "ESP_EVENT_DECLARE_BASE" in header file
+                       INCLUDE_DIRS 
+                            "include" 
+                            "${IDF_PATH}/components/driver/include"
+                            "${IDF_PATH}/components/esp_pm/include"
+                       REQUIRES "esp_event" "driver" "esp_netif" # For using "ESP_EVENT_DECLARE_BASE" in header file
                        PRIV_REQUIRES ${priv_requires})
 
 # uses C11 atomic feature

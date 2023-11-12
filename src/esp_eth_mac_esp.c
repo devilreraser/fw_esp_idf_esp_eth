@@ -14,13 +14,19 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/cdefs.h>
+#include "esp_idf_version.h"
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include "esp_private/periph_ctrl.h"
+#else
 #include "driver/periph_ctrl.h"
+#endif
 #include "driver/gpio.h"
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_eth.h"
 #include "esp_pm.h"
+#include "esp_mac.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
 #include "esp_intr_alloc.h"
@@ -245,7 +251,7 @@ static esp_err_t emac_esp32_receive(esp_eth_mac_t *mac, uint8_t *buf, uint32_t *
     ESP_GOTO_ON_FALSE(buf && length, ESP_ERR_INVALID_ARG, err, TAG, "can't set buf and length to null");
     uint32_t receive_len = emac_hal_receive_frame(&emac->hal, buf, expected_len, &emac->frames_remain, &emac->free_rx_descriptor);
     /* we need to check the return value in case the buffer size is not enough */
-    ESP_LOGD(TAG, "receive len= %d", receive_len);
+    ESP_LOGD(TAG, "receive len= %d", (int)receive_len);
     ESP_GOTO_ON_FALSE(expected_len >= receive_len, ESP_ERR_INVALID_SIZE, err, TAG, "received buffer longer than expected");
     *length = receive_len;
     return ESP_OK;
@@ -315,20 +321,36 @@ static void emac_config_apll_clock(void)
     case RTC_XTAL_FREQ_40M: // Recommended
         /* 50 MHz = 40MHz * (4 + 6) / (2 * (2 + 2) = 50.000 */
         /* sdm0 = 0, sdm1 = 0, sdm2 = 6, o_div = 2 */
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        rtc_clk_apll_enable(true);
+        #else
         rtc_clk_apll_enable(true, 0, 0, 6, 2);
+        #endif
         break;
     case RTC_XTAL_FREQ_26M:
         /* 50 MHz = 26MHz * (4 + 15 + 118 / 256 + 39/65536) / ((3 + 2) * 2) = 49.999992 */
         /* sdm0 = 39, sdm1 = 118, sdm2 = 15, o_div = 3 */
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        rtc_clk_apll_enable(true);
+        #else
         rtc_clk_apll_enable(true, 39, 118, 15, 3);
+        #endif
         break;
     case RTC_XTAL_FREQ_24M:
         /* 50 MHz = 24MHz * (4 + 12 + 255 / 256 + 255/65536) / ((2 + 2) * 2) = 49.499977 */
         /* sdm0 = 255, sdm1 = 255, sdm2 = 12, o_div = 2 */
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        rtc_clk_apll_enable(true);
+        #else
         rtc_clk_apll_enable(true, 255, 255, 12, 2);
+        #endif
         break;
     default: // Assume we have a 40M xtal
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        rtc_clk_apll_enable(true);
+        #else
         rtc_clk_apll_enable(true, 0, 0, 6, 2);
+        #endif
         break;
     }
 }
@@ -358,8 +380,14 @@ static esp_err_t emac_esp32_init(esp_eth_mac_t *mac)
     emac_hal_reset_desc_chain(&emac->hal);
     /* init mac registers by default */
     emac_hal_init_mac_default(&emac->hal);
+    #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    /* init dma registers with selected EMAC-DMA configuration */
+    emac_hal_dma_config_t dma_config = { .dma_burst_len = ETH_DMA_BURST_LEN_32 };
+    emac_hal_init_dma_default(&emac->hal, &dma_config);
+    #else
     /* init dma registers by default */
     emac_hal_init_dma_default(&emac->hal);
+    #endif
     /* get emac address from efuse */
     ESP_GOTO_ON_ERROR(esp_read_mac(emac->addr, ESP_MAC_ETH), err, TAG, "fetch ethernet mac address failed");
     /* set MAC address to emac register */
@@ -487,7 +515,11 @@ static esp_err_t esp_emac_alloc_driver_obj(const eth_mac_config_t *config, emac_
     /* create rx task */
     BaseType_t core_num = tskNO_AFFINITY;
     if (config->flags & ETH_MAC_FLAG_PIN_TO_CORE) {
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        core_num = esp_cpu_get_core_id();
+        #else
         core_num = cpu_hal_get_core_id();
+        #endif
     }
     BaseType_t xReturned = xTaskCreatePinnedToCore(emac_esp32_rx_task, "emac_rx", config->rx_task_stack_size, emac,
                            config->rx_task_prio, &emac->rx_task_hdl, core_num);

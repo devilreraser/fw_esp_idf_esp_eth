@@ -699,7 +699,7 @@ static esp_err_t emac_w5500_transmit(esp_eth_mac_t *mac, uint8_t *buf, uint32_t 
 
     ESP_GOTO_ON_ERROR(w5500_read(emac, W5500_REG_SOCK_TX_FSR(0), &tx_read_registers_0x20_to_0x25, sizeof(tx_read_registers_0x20_to_0x25)), err, TAG, "read TX pointers failed");
     free_size = __builtin_bswap16(tx_read_registers_0x20_to_0x25.Sn_TX_FSR);
-    ESP_GOTO_ON_FALSE(length <= free_size, ESP_ERR_NO_MEM, err, TAG, "free size (%d) < send length (%d)", length, free_size);
+    ESP_GOTO_ON_FALSE(length <= free_size, ESP_ERR_NO_MEM, err, TAG, "free size (%d) < send length (%d)", (int)length, (int)free_size);
     offset = __builtin_bswap16(tx_read_registers_0x20_to_0x25.Sn_TX_WR);
     #else
     uint16_t offset = 0;
@@ -859,7 +859,11 @@ esp_eth_mac_t *esp_eth_mac_new_w5500(const eth_w5500_config_t *w5500_config, con
     /* create w5500 task */
     BaseType_t core_num = tskNO_AFFINITY;
     if (mac_config->flags & ETH_MAC_FLAG_PIN_TO_CORE) {
+        #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+        core_num = esp_cpu_get_core_id();
+        #else
         core_num = cpu_hal_get_core_id();
+        #endif
     }
     BaseType_t xReturned = xTaskCreatePinnedToCore(emac_w5500_task, "w5500_tsk", mac_config->rx_task_stack_size, emac,
                            mac_config->rx_task_prio, &emac->rx_task_hdl, core_num);
