@@ -20,10 +20,12 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_eth.h"
+#include "esp_eth_driver.h"
 #include "esp_system.h"
 #include "esp_intr_alloc.h"
 #include "esp_heap_caps.h"
 #include "esp_rom_gpio.h"
+#include "esp_cpu.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -35,11 +37,11 @@
 static const char *TAG = "w5500.mac";
 
 #define W5500_SPI_LOCK_TIMEOUT_MS (50)
-//#define W5500_SPI_LOCK_TIMEOUT_MS portMAX_DELAY
 #define W5500_TX_MEM_SIZE (0x4000)
 #define W5500_RX_MEM_SIZE (0x4000)
 
-#define USE_SPI_INTERRUPT   1
+#define USE_READ_REGISTERS_20_25	1
+#define USE_SPI_INTERRUPT   		1
 
 #if USE_SPI_INTERRUPT
 typedef struct {
@@ -54,11 +56,11 @@ typedef struct {
     spi_device_handle_t spi_hdl;
     SemaphoreHandle_t spi_lock;
     TaskHandle_t rx_task_hdl;
-    TaskHandle_t spi_trans_task_hdl;
     uint32_t sw_reset_timeout_ms;
     int int_gpio_num;
     uint8_t addr[6];
     bool packets_remain;
+    TaskHandle_t spi_trans_task_hdl;
 } emac_w5500_t;
 
 spi_transaction_t* p_array_transactions = NULL;
@@ -133,9 +135,7 @@ static esp_err_t w5500_write(emac_w5500_t *emac, uint32_t address, const void *v
 {
     esp_err_t ret = ESP_OK;
 
-
-    spi_transaction_t trans = 
-    {
+    spi_transaction_t trans = {
         .cmd = (address >> W5500_ADDR_OFFSET),
         .addr = ((address & 0xFFFF) | (W5500_ACCESS_MODE_WRITE << W5500_RWB_OFFSET) | W5500_SPI_OP_MODE_VDM),
         .length = 8 * len,
@@ -676,7 +676,7 @@ static esp_err_t emac_w5500_transmit(esp_eth_mac_t *mac, uint8_t *buf, uint32_t 
 
     //ESP_LOGI(TAG, LOG_COLOR(LOG_COLOR_CYAN)"emac_w5500_transmit %d bytes", length);
 
-    #if 1
+    #if USE_READ_REGISTERS_20_25
 
     // check if there're free memory to store this packet
     uint16_t free_size;
@@ -703,6 +703,7 @@ static esp_err_t emac_w5500_transmit(esp_eth_mac_t *mac, uint8_t *buf, uint32_t 
     offset = __builtin_bswap16(tx_read_registers_0x20_to_0x25.Sn_TX_WR);
     #else
     uint16_t offset = 0;
+
     // check if there're free memory to store this packet
     uint16_t free_size = 0;
     ESP_GOTO_ON_ERROR(w5500_get_tx_free_size(emac, &free_size), err, TAG, "get free size failed");
@@ -775,8 +776,6 @@ err:
 
 static esp_err_t emac_w5500_init(esp_eth_mac_t *mac)
 {
-    //spi_transaction_init();
-
     esp_err_t ret = ESP_OK;
     emac_w5500_t *emac = __containerof(mac, emac_w5500_t, parent);
     esp_eth_mediator_t *eth = emac->eth;
@@ -816,7 +815,10 @@ static esp_err_t emac_w5500_del(esp_eth_mac_t *mac)
 {
     emac_w5500_t *emac = __containerof(mac, emac_w5500_t, parent);
     vTaskDelete(emac->rx_task_hdl);
+    #if USE_SPI_INTERRUPT
     vTaskDelete(emac->spi_trans_task_hdl);
+    #endif
+    spi_bus_remove_device(emac->spi_hdl);
     vSemaphoreDelete(emac->spi_lock);
     free(emac);
     return ESP_OK;
@@ -831,10 +833,26 @@ esp_eth_mac_t *esp_eth_mac_new_w5500(const eth_w5500_config_t *w5500_config, con
     ESP_GOTO_ON_FALSE(emac, NULL, err, TAG, "no mem for MAC instance");
     /* w5500 driver is interrupt driven */
     ESP_GOTO_ON_FALSE(w5500_config->int_gpio_num >= 0, NULL, err, TAG, "invalid interrupt gpio number");
+	#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    /* SPI device init */
+    spi_device_interface_config_t spi_devcfg;
+    memcpy(&spi_devcfg, w5500_config->spi_devcfg, sizeof(spi_device_interface_config_t));
+    if (w5500_config->spi_devcfg->command_bits == 0 && w5500_config->spi_devcfg->address_bits == 0) {
+        /* configure default SPI frame format */
+        spi_devcfg.command_bits = 16; // Actually it's the address phase in W5500 SPI frame
+        spi_devcfg.address_bits = 8;  // Actually it's the control phase in W5500 SPI frame
+    } else {
+        ESP_GOTO_ON_FALSE(w5500_config->spi_devcfg->command_bits == 16 || w5500_config->spi_devcfg->address_bits == 8,
+                            NULL, err, TAG, "incorrect SPI frame format (command_bits/address_bits)");
+    }
+    ESP_GOTO_ON_FALSE(spi_bus_add_device(w5500_config->spi_host_id, &spi_devcfg, &emac->spi_hdl) == ESP_OK,
+                                            NULL, err, TAG, "adding device to SPI host #%d failed", w5500_config->spi_host_id + 1);
+	#else
+    emac->spi_hdl = w5500_config->spi_hdl;
+	#endif
     /* bind methods and attributes */
     emac->sw_reset_timeout_ms = mac_config->sw_reset_timeout_ms;
     emac->int_gpio_num = w5500_config->int_gpio_num;
-    emac->spi_hdl = w5500_config->spi_hdl;
     emac->parent.set_mediator = emac_w5500_set_mediator;
     emac->parent.init = emac_w5500_init;
     emac->parent.deinit = emac_w5500_deinit;

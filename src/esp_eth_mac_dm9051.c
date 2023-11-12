@@ -20,6 +20,8 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_eth.h"
+#include "esp_eth_driver.h"
+#include "esp_timer.h"
 #include "esp_system.h"
 #include "esp_intr_alloc.h"
 #include "esp_heap_caps.h"
@@ -31,6 +33,7 @@
 #include "sdkconfig.h"
 #include "esp_rom_gpio.h"
 #include "esp_rom_sys.h"
+#include "esp_cpu.h"
 
 static const char *TAG = "dm9051.mac";
 
@@ -737,6 +740,7 @@ static esp_err_t emac_dm9051_del(esp_eth_mac_t *mac)
 {
     emac_dm9051_t *emac = __containerof(mac, emac_dm9051_t, parent);
     vTaskDelete(emac->rx_task_hdl);
+    spi_bus_remove_device(emac->spi_hdl);
     vSemaphoreDelete(emac->spi_lock);
     free(emac);
     return ESP_OK;
@@ -752,10 +756,25 @@ esp_eth_mac_t *esp_eth_mac_new_dm9051(const eth_dm9051_config_t *dm9051_config, 
     ESP_GOTO_ON_FALSE(emac, NULL, err, TAG, "calloc emac failed");
     /* dm9051 receive is driven by interrupt only for now*/
     ESP_GOTO_ON_FALSE(dm9051_config->int_gpio_num >= 0, NULL, err, TAG, "error interrupt gpio number");
+	#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)    /* SPI device init */
+    spi_device_interface_config_t spi_devcfg;
+    memcpy(&spi_devcfg, dm9051_config->spi_devcfg, sizeof(spi_device_interface_config_t));
+    if (dm9051_config->spi_devcfg->command_bits == 0 && dm9051_config->spi_devcfg->address_bits == 0) {
+        /* configure default SPI frame format */
+        spi_devcfg.command_bits = 1;
+        spi_devcfg.address_bits = 7;
+    } else {
+        ESP_GOTO_ON_FALSE(dm9051_config->spi_devcfg->command_bits == 1 || dm9051_config->spi_devcfg->address_bits == 7,
+                            NULL, err, TAG, "incorrect SPI frame format (command_bits/address_bits)");
+    }
+    ESP_GOTO_ON_FALSE(spi_bus_add_device(dm9051_config->spi_host_id, &spi_devcfg, &emac->spi_hdl) == ESP_OK,
+                                            NULL, err, TAG, "adding device to SPI host #%d failed", dm9051_config->spi_host_id + 1);
+	#else
+	emac->spi_hdl = dm9051_config->spi_hdl;
+	#endif
     /* bind methods and attributes */
     emac->sw_reset_timeout_ms = mac_config->sw_reset_timeout_ms;
     emac->int_gpio_num = dm9051_config->int_gpio_num;
-    emac->spi_hdl = dm9051_config->spi_hdl;
     emac->parent.set_mediator = emac_dm9051_set_mediator;
     emac->parent.init = emac_dm9051_init;
     emac->parent.deinit = emac_dm9051_deinit;
