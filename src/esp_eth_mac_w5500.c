@@ -21,7 +21,7 @@
 #include "esp_check.h"
 #include "esp_eth.h"
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
-#include "esp_eth_driver.h"
+//#include "esp_eth_driver.h"
 #endif
 #include "esp_system.h"
 #include "esp_intr_alloc.h"
@@ -298,6 +298,7 @@ err:
     return ret;
 }
 
+#if USE_READ_REGISTERS_20_25 == 0
 static esp_err_t w5500_get_tx_free_size(emac_w5500_t *emac, uint16_t *size)
 {
     esp_err_t ret = ESP_OK;
@@ -314,6 +315,7 @@ static esp_err_t w5500_get_tx_free_size(emac_w5500_t *emac, uint16_t *size)
 err:
     return ret;
 }
+#endif
 
 static esp_err_t w5500_get_rx_received_size(emac_w5500_t *emac, uint16_t *size)
 {
@@ -328,7 +330,6 @@ static esp_err_t w5500_get_rx_received_size(emac_w5500_t *emac, uint16_t *size)
 err:
     return ret;
 }
-
 static esp_err_t w5500_write_buffer(emac_w5500_t *emac, const void *buffer, uint32_t len, uint16_t offset)
 {
     esp_err_t ret = ESP_OK;
@@ -721,7 +722,7 @@ static esp_err_t emac_w5500_transmit(esp_eth_mac_t *mac, uint8_t *buf, uint32_t 
     // check if there're free memory to store this packet
     uint16_t free_size = 0;
     ESP_GOTO_ON_ERROR(w5500_get_tx_free_size(emac, &free_size), err, TAG, "get free size failed");
-    ESP_GOTO_ON_FALSE(length <= free_size, ESP_ERR_NO_MEM, err, TAG, "free size (%d) < send length (%d)", length, free_size);
+    ESP_GOTO_ON_FALSE(length <= free_size, ESP_ERR_NO_MEM, err, TAG, "free size (%d) < send length (%d)", (int)length, (int)free_size);
     // get current write pointer
     ESP_GOTO_ON_ERROR(w5500_read(emac, W5500_REG_SOCK_TX_WR(0), &offset, sizeof(offset)), err, TAG, "read TX WR failed");
     offset = __builtin_bswap16(offset);
